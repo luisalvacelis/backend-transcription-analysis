@@ -14,7 +14,7 @@ class Settings:
     API_TITLE: str = os.getenv('API_TITLE', 'Transcription And Analysis App API')
     API_VERSION: str = os.getenv('API_VERSION', '1.0.0')
     
-    CORS_ORIGINS: list[str] = os.getenv('CORS_ORIGINS', 'http://localhost:4200,http://localhost:3000').split(',')
+    CORS_ORIGINS: list[str] = os.getenv('CORS_ORIGINS', 'http://localhost:4200,http://localhost:3000,https://fvp10lbd-4200.brs.devtunnels.ms/').split(',')
     CORS_CREDENTIALS: bool = os.getenv('CORS_CREDENTIALS', 'true').lower() == 'true'
 
 settings = Settings()
@@ -23,6 +23,7 @@ from app.routers.auth_router import router as auth_router
 from app.routers.campaigns_router import router as campaigns_router
 from app.routers.audios_router import router as audios_router
 from app.routers.analyses_router import router as analyses_router
+from app.routers.configs_router import router as configs_router
 from fastapi import Depends
 from app.dependencies.auth_deps import get_current_user
 
@@ -46,6 +47,7 @@ app.include_router(auth_router, prefix='/auth', tags=['Authentication'])
 app.include_router(campaigns_router, prefix='/campaigns', tags=['Campaigns'], dependencies=[Depends(get_current_user)])
 app.include_router(audios_router, prefix='/audios', tags=['Audios'], dependencies=[Depends(get_current_user)])
 app.include_router(analyses_router, prefix='/analyses', tags=['Analyses'], dependencies=[Depends(get_current_user)])
+app.include_router(configs_router, prefix='/analysis-configs', tags=['Analysis Configs'], dependencies=[Depends(get_current_user)])
 
 @app.get('/')
 def root():

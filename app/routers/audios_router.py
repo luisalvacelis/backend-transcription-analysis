@@ -5,13 +5,16 @@ from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, Form,
     HTTPException, Query, UploadFile, status
 )
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.components.connection import get_db
+from app.components.models import Audio, Campaign
 from app.components.schemas import (
     AudioResponse,
     AudioPage,
-    MessageResponse
+    MessageResponse,
+    AudioUpdateRequest,
 )
 from app.dependencies.auth_deps import CurrentUser
 from app.services.audio_service import AudioRepository, CampaignRepository
@@ -43,7 +46,8 @@ def get_whisperx_service() -> WhisperXService:
 
 def _build_audio_create_payload(file_info: dict) -> dict:
     return {
-        'audio_name': file_info['audio_name']
+        'audio_name': file_info['audio_name'],
+        'minutes': float(file_info.get('minutes') or 0),
     }
 
 
@@ -96,6 +100,7 @@ def list_audios(
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
+    AudioRepository.backfill_missing_minutes(db, user.id)  # type: ignore[arg-type]
     items, meta = AudioRepository.get_paginated(
         db,
         user_id=user.id,  # type: ignore
@@ -109,11 +114,28 @@ def list_audios(
 
 @router.get('/stats/summary', summary='Estadísticas de audios del usuario')
 def get_stats(user: CurrentUser, db: Session = Depends(get_db)):
+    AudioRepository.backfill_missing_minutes(db, user.id)  # type: ignore[arg-type]
     total = AudioRepository.count_by_user(db, user.id)  # type: ignore
     total_cost = AudioRepository.get_total_cost(db, user.id)  # type: ignore
+    total_duration_minutes = (
+        db.query(func.sum(Audio.minutes))
+        .join(Campaign, Campaign.id == Audio.campaign_id)
+        .filter(Campaign.user_id == user.id)
+        .scalar() or 0.0
+    )
+    transcribed = (
+        db.query(func.count(Audio.id))
+        .join(Campaign, Campaign.id == Audio.campaign_id)
+        .filter(Campaign.user_id == user.id, Audio.transcription.isnot(None))
+        .scalar() or 0
+    )
+    pending = max(total - int(transcribed), 0)
     return {
         'total': total,
+        'transcribed': int(transcribed),
+        'pending': pending,
         'total_cost': total_cost,
+        'total_duration_minutes': float(total_duration_minutes),
     }
 
 
@@ -268,6 +290,37 @@ def delete_audio(
         message='Audio eliminado correctamente',
         detail=None
     )
+
+
+@router.put('/{audio_id}', response_model=AudioResponse, summary='Actualizar audio')
+def update_audio(
+    audio_id: UUID,
+    data: AudioUpdateRequest,
+    user: CurrentUser,
+    db: Session = Depends(get_db)
+):
+    audio = AudioRepository.get_by_user_and_id(db, user.id, audio_id)  # type: ignore
+    if not audio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Audio no encontrado'
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+    if not update_data:
+        return audio
+
+    if 'audio_name' in update_data:
+        update_data['audio_name'] = str(update_data['audio_name']).strip()
+        if not update_data['audio_name']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='El nombre del audio es obligatorio'
+            )
+
+    updated = AudioRepository.update(db, audio, **update_data)
+    DateTimeUtils.log(f'Audio actualizado: {audio_id}')
+    return updated
 
 
 @router.delete('/campaign/{campaign_id}/all', response_model=MessageResponse, summary='Eliminar todos los audios de una campaña')

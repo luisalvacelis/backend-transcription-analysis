@@ -1,10 +1,11 @@
 from typing import Optional
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
 
-from app.components.models import Audio, Campaign
+from app.components.models import Audio, Campaign, AudioAnalysis
 from app.components.schemas import PageMeta
 
 
@@ -95,6 +96,7 @@ class AudioRepository:
 
     @staticmethod
     def delete(db: Session, audio: Audio) -> None:
+        db.query(AudioAnalysis).filter(AudioAnalysis.audio_id == audio.id).delete(synchronize_session=False)
         db.delete(audio)
         db.commit()
 
@@ -107,6 +109,41 @@ class AudioRepository:
             .scalar()
         )
         return float(result or 0.0)
+
+    @staticmethod
+    def backfill_missing_minutes(db: Session, user_id: UUID) -> int:
+        from app.services.storage_service import UploadService
+
+        upload_dir = UploadService._upload_dir()
+        audios = (
+            db.query(Audio)
+            .join(Campaign)
+            .filter(Campaign.user_id == user_id)
+            .filter(or_(Audio.minutes.is_(None), Audio.minutes <= 0))
+            .all()
+        )
+
+        updated = 0
+        for audio in audios:
+            audio_path = upload_dir / Path(audio.audio_name).name
+            if not audio_path.exists():
+                continue
+
+            try:
+                duration_seconds = float(UploadService.get_duration_seconds(audio_path))
+            except Exception:
+                continue
+
+            if duration_seconds <= 0:
+                continue
+
+            audio.minutes = round(duration_seconds / 60.0, 2)
+            updated += 1
+
+        if updated > 0:
+            db.commit()
+
+        return updated
 
     @staticmethod
     def count_by_user(db: Session, user_id: UUID) -> int:
