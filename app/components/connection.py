@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 
 engine = create_engine(
-    os.environ.get('DATABASE_URL'),
+    os.environ.get('DATABASE_URL',''),
     pool_pre_ping=True,
     pool_recycle=3600,
     echo=False

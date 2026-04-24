@@ -14,8 +14,8 @@ class Settings:
     API_TITLE: str = os.getenv('API_TITLE', 'Transcription And Analysis App API')
     API_VERSION: str = os.getenv('API_VERSION', '1.0.0')
     
-    CORS_ORIGINS: list[str] = os.getenv('CORS_ORIGINS', 'http://localhost:4200,http://localhost:3000,https://fvp10lbd-4200.brs.devtunnels.ms/').split(',')
-    CORS_CREDENTIALS: bool = os.getenv('CORS_CREDENTIALS', 'true').lower() == 'true'
+    CORS_ORIGINS: list[str] = os.getenv('CORS_ORIGINS', '').split(',')
+    CORS_CREDENTIALS: bool = os.getenv('CORS_CREDENTIALS', '').lower() == 'true'
 
 settings = Settings()
 

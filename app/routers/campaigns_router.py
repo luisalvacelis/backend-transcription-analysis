@@ -29,6 +29,7 @@ from app.services.config_service import (
     OutputFormatRepository,
     PromptTemplateRepository,
     get_default_metadata_columns_by_type,
+    is_valid_metadata_extraction_type,
     DEFAULT_METADATA_EXTRACTION_TYPE,
 )
 from app.utils.extra_utils import DateTimeUtils
@@ -971,6 +972,12 @@ def run_campaign_pipeline_async(
     prompt_text = None
     output_fields = None
     format_snapshot = None
+    metadata_extraction_type = (data.metadata_extraction_type or '').strip()
+    if metadata_extraction_type and not is_valid_metadata_extraction_type(metadata_extraction_type):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='metadata_extraction_type invalido',
+        )
     if mode in ('analyze', 'both'):
         if not data.prompt_template_id or not data.output_format_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='prompt_template_id y output_format_id son obligatorios para analizar')
@@ -989,6 +996,9 @@ def run_campaign_pipeline_async(
         prompt_text = prompt.prompt_text
         format_snapshot = OutputFormatRepository.parse_layout_config(output_format)
 
+        if metadata_extraction_type:
+            format_snapshot['metadata_extraction_type'] = metadata_extraction_type
+
     background_tasks.add_task(
         _process_campaign_pipeline,
         campaign_id=campaign_id,
@@ -1005,6 +1015,7 @@ def run_campaign_pipeline_async(
         'campaign_id': campaign_id,
         'campaign_name': campaign.campaign_name,
         'mode': mode,
+        'metadata_extraction_type': metadata_extraction_type or None,
     }
 
 

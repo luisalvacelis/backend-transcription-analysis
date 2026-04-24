@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 from sqlalchemy.orm import Session
 
@@ -146,7 +146,8 @@ class PromptTemplateRepository:
 
     @staticmethod
     def update(db: Session, prompt: PromptTemplate, **kwargs) -> PromptTemplate:
-        if is_protected_prompt_name(prompt.name):
+        prompt_name = cast(str, prompt.name)
+        if is_protected_prompt_name(prompt_name):
             raise ValueError('Este prompt esta protegido y no puede modificarse')
 
         for key, value in kwargs.items():
@@ -158,7 +159,8 @@ class PromptTemplateRepository:
 
     @staticmethod
     def delete(db: Session, prompt: PromptTemplate) -> None:
-        if is_protected_prompt_name(prompt.name):
+        prompt_name = cast(str, prompt.name)
+        if is_protected_prompt_name(prompt_name):
             raise ValueError('Este prompt esta protegido y no puede eliminarse')
 
         db.delete(prompt)
@@ -219,8 +221,9 @@ class OutputFormatRepository:
     def update(db: Session, output_format: OutputFormat, **kwargs) -> OutputFormat:
         fields = kwargs.pop('fields', None)
         if fields is not None:
+            fields_json = cast(str, output_format.fields_json)
             try:
-                current_payload = json.loads(output_format.fields_json)
+                current_payload = json.loads(fields_json)
                 if not isinstance(current_payload, dict):
                     current_payload = {'fields': fields}
             except Exception:
@@ -231,18 +234,19 @@ class OutputFormatRepository:
                 layout_config = kwargs.pop('layout_config')
                 if layout_config is not None:
                     current_payload['layout'] = layout_config
-            output_format.fields_json = json.dumps(current_payload, ensure_ascii=True)
+            setattr(output_format, 'fields_json', json.dumps(current_payload, ensure_ascii=True))
         elif 'layout_config' in kwargs:
             layout_config = kwargs.pop('layout_config')
+            fields_json = cast(str, output_format.fields_json)
             try:
-                current_payload = json.loads(output_format.fields_json)
+                current_payload = json.loads(fields_json)
                 if not isinstance(current_payload, dict):
                     current_payload = {'fields': OutputFormatRepository.parse_fields(output_format)}
             except Exception:
                 current_payload = {'fields': OutputFormatRepository.parse_fields(output_format)}
             if layout_config is not None:
                 current_payload['layout'] = layout_config
-            output_format.fields_json = json.dumps(current_payload, ensure_ascii=True)
+            setattr(output_format, 'fields_json', json.dumps(current_payload, ensure_ascii=True))
 
         for key, value in kwargs.items():
             if hasattr(output_format, key) and value is not None:
@@ -260,7 +264,8 @@ class OutputFormatRepository:
     @staticmethod
     def parse_fields(output_format: OutputFormat) -> list[str]:
         try:
-            parsed = json.loads(output_format.fields_json)
+            fields_json = cast(str, output_format.fields_json)
+            parsed = json.loads(fields_json)
             if isinstance(parsed, list):
                 return [str(v).strip() for v in parsed if str(v).strip()]
             if isinstance(parsed, dict):
@@ -274,7 +279,8 @@ class OutputFormatRepository:
     @staticmethod
     def parse_layout_config(output_format: OutputFormat) -> dict[str, Any]:
         try:
-            parsed = json.loads(output_format.fields_json)
+            fields_json = cast(str, output_format.fields_json)
+            parsed = json.loads(fields_json)
             if isinstance(parsed, dict):
                 layout = parsed.get('layout')
                 if isinstance(layout, dict):
@@ -302,18 +308,20 @@ def suggest_prompt_format_mappings(db: Session, user_id: UUID) -> list[dict[str,
 
     format_rows: list[tuple[OutputFormat, set[str]]] = []
     for output_format in formats:
-        format_tokens = _tokenize(output_format.name)
+        output_format_name = cast(str, output_format.name)
+        format_tokens = _tokenize(output_format_name)
         format_tokens.update(_tokenize(' '.join(OutputFormatRepository.parse_fields(output_format))))
         format_rows.append((output_format, format_tokens))
 
     results: list[dict[str, object]] = []
     for prompt in prompts:
-        prompt_tokens = _tokenize(prompt.name)
+        prompt_name = cast(str, prompt.name)
+        prompt_tokens = _tokenize(prompt_name)
         if not prompt_tokens:
             results.append(
                 {
                     'prompt_id': prompt.id,
-                    'prompt_name': prompt.name,
+                    'prompt_name': prompt_name,
                     'format_id': None,
                     'format_name': None,
                     'score': 0.0,
@@ -337,12 +345,13 @@ def suggest_prompt_format_mappings(db: Session, user_id: UUID) -> list[dict[str,
                 best_format = output_format
 
         if best_format and best_score > 0:
+            best_format_name = cast(str, best_format.name)
             results.append(
                 {
                     'prompt_id': prompt.id,
-                    'prompt_name': prompt.name,
+                    'prompt_name': prompt_name,
                     'format_id': best_format.id,
-                    'format_name': best_format.name,
+                    'format_name': best_format_name,
                     'score': round(best_score, 3),
                     'reason': 'Coincidencia por nombre de prompt y campos del formato',
                 }
@@ -351,7 +360,7 @@ def suggest_prompt_format_mappings(db: Session, user_id: UUID) -> list[dict[str,
             results.append(
                 {
                     'prompt_id': prompt.id,
-                    'prompt_name': prompt.name,
+                    'prompt_name': prompt_name,
                     'format_id': None,
                     'format_name': None,
                     'score': 0.0,

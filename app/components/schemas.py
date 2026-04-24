@@ -177,6 +177,7 @@ class CampaignPipelineRequest(BaseModel):
     analysis_provider: str = Field('openai', description='Proveedor de analisis')
     prompt_template_id: Optional[UUID] = None
     output_format_id: Optional[UUID] = None
+    metadata_extraction_type: Optional[str] = None
 
 
 class CampaignAsyncAnalysisStatus(BaseModel):
