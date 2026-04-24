@@ -51,4 +51,4 @@ app.include_router(configs_router, prefix='/analysis-configs', tags=['Analysis C
 
 @app.get('/')
 def root():
-    return {'message': 'API is running'}
+    return {'message': 'API is running for now'}
